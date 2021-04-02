@@ -8,8 +8,9 @@
 #include <stdbool.h>
 
 #include "thpool.h"
+#include "clist.h"
 
-#define NUM_THREADS 4
+#define NUM_THREADS 10
 #define PORT 6667
 
 int init_server(struct sockaddr_in *addr);
@@ -19,8 +20,10 @@ void read_client_msg(void *cfd);
 
 enum server_status {DEAD, ALIVE, FULL};
 
+/* Global linked list holding connected clients */
+clist *client_list;
 int main(void) {
-    int server_sock, client_sock;
+    int server_sock;
     int *cfd;
     time_t currTime;
     struct sockaddr_in addr;
@@ -33,14 +36,16 @@ int main(void) {
     broadcast(server_sock, addr);
     printf("Server started at %s", ctime(&currTime));
 
+    client_list = (clist*) malloc(sizeof(clist));
     STATUS = ALIVE;
     while (STATUS) {
-        client_sock = accept_conn(server_sock, addr);
         cfd = malloc(sizeof(int));
-        *cfd = client_sock;
+        *cfd = accept_conn(server_sock, addr);
+        clist_insert(client_list, cfd);
         thpool_add_work(pool, read_client_msg, cfd);
     }
-    
+   
+    clist_destroy(client_list);
     thpool_destroy(pool);
     close(server_sock);
 
@@ -99,19 +104,20 @@ int accept_conn(int sfd, struct sockaddr_in addr) {
 void read_client_msg(void *cfd) {
     int *c_socket = (int*)cfd;
     bool alive = 1;
-    char buf[1024] = {0};
+    char msg[1024] = {0};
     char *success = "Successfully connected to server";
 
     send(*c_socket, success, strlen(success), 0);
     while (alive) {
-        alive = read(*c_socket, buf, 1024);
+        alive = read(*c_socket, msg, 1024);
         if (alive) {
-            send(*c_socket, buf, 1024, 0);
-            printf("%s\n", buf);
+            clist_send_msg(client_list, msg);
+            printf("%s\n", msg);
         }
-            memset(buf, 0, 1024);
-    }
-
+        memset(msg, 0, 1024);
+    } 
+   
+    clist_remove(client_list, c_socket);
     close(*c_socket);
     free(c_socket);
     printf("Connection reset\n");
