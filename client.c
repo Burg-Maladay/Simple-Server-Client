@@ -6,8 +6,7 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <pthread.h>
-
-#define IP "127.0.0.1"
+#define IP "10.0.0.71"
 #define PORT 6667
 
 int init_csock(struct sockaddr_in *addr);
@@ -39,7 +38,6 @@ int main(void) {
         else if (send(clientfd, buf, strlen(buf), 0) < 0) {
             printf("Error sending message\n");
         } 
-
         memset(buf, 0, 1024);
     }
 
@@ -77,10 +75,14 @@ void conn_client(int cfd, struct sockaddr_in addr) {
 /* Handles incoming messages from server */
 void *incoming_msg(void *cfd){
     char msg[1024];
+    bool alive = 1;
     
-    while (1) {
-        read(*(int*)cfd, msg, 1024);
-        printf("%s\n", msg);
+    while (alive) {
+        alive = read(*(int*)cfd, msg, 1024);
+        if (alive) {
+            printf("%s\n", msg);
+        }
+        memset(msg, 0, 1024);
     }
 
     return NULL;
